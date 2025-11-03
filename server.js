@@ -4,73 +4,24 @@ import fetch from "node-fetch";
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// حتى نعرف مصدر العميل الحقيقي
 app.set("trust proxy", true);
 
-// ✅ اختبار بسيط لتأكيد عمل البروكسي
-app.get("/test-proxy-ping", (req, res) => {
-  res.setHeader("X-Served-By", "proxy-ip.onrender.com");
-  res.json({
-    ok: true,
-    servedBy: "proxy-ip.onrender.com",
-    yourIp: req.ip,
-  });
-});
-
-// ✅ بروكسي لمسارات /get.php (ملفات m3u)
-app.get("/get.php", async (req, res) => {
-  const query = req.originalUrl.split("?")[1] || "";
-  const targetHost = "http://cname.cdnnet.xyz";
-  const targetUrl = `${targetHost}/get.php?${query}`;
-
-  console.log("➡️ [get.php] Request from", req.ip, "->", targetUrl);
-
+// 🔹 1) المسار العام لأي طلب (get.php أو live/... أو أي شيء)
+app.use(async (req, res) => {
   try {
-    const response = await fetch(targetUrl, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0",
-        "Referer": "https://www.google.com/",
-        "Origin": "https://www.google.com",
-        "Accept": "*/*",
-        "Connection": "keep-alive",
-      },
-      redirect: "manual",
-      compress: false,
-    });
+    // الـ URL الأصلي الذي طلبه العميل
+    const originalUrl = req.originalUrl;
+    // هذا هو السيرفر الحقيقي الذي تريد تمرير الطلب إليه
+    // يمكنك تغييره إن أردت.
+    const targetHost = "http://cname.cdnnet.xyz";
 
-    res.status(response.status);
-    for (const [key, value] of response.headers.entries()) {
-      res.setHeader(key, value);
-    }
+    // نبني الرابط النهائي الذي سنطلبه من المصدر
+    const targetUrl = `${targetHost}${originalUrl}`;
 
-    // علامة البروكسي
-    res.setHeader("X-Served-By", "proxy-ip.onrender.com");
+    console.log(`➡️ Proxying request to: ${targetUrl}`);
 
-    if (!response.ok) {
-      return res.send(`Upstream error: ${response.status}`);
-    }
-
-    const body = response.body;
-    if (body) body.pipe(res);
-    else res.send("Empty response from upstream.");
-  } catch (err) {
-    console.error("❌ Proxy error [get.php]:", err.message);
-    res.status(502).send(`Proxy error: ${err.message}`);
-  }
-});
-
-// ✅ بروكسي لمسارات /live/...
-app.get("/live/:folder/:stream/:file", async (req, res) => {
-  const { folder, stream, file } = req.params;
-  const query = req.originalUrl.split("?")[1] || "";
-  const targetHost = "http://cname.cdnnet.xyz";
-  const targetUrl = `${targetHost}/live/${folder}/${stream}/${file}${
-    query ? "?" + query : ""
-  }`;
-
-  console.log("➡️ [live] Request from", req.ip, "->", targetUrl);
-
-  try {
+    // طلب إلى السيرفر الأصلي مع بعض الترويسات المشابهة للمتصفح
     const response = await fetch(targetUrl, {
       headers: {
         "User-Agent":
@@ -85,31 +36,35 @@ app.get("/live/:folder/:stream/:file", async (req, res) => {
       compress: false,
     });
 
+    // نرسل نفس حالة الاستجابة إلى العميل
     res.status(response.status);
-    for (const [key, value] of response.headers.entries()) {
-      res.setHeader(key, value);
-    }
 
-    // علامة البروكسي
+    // ننسخ كل الترويسات من السيرفر الأصلي
+    response.headers.forEach((value, key) => {
+      res.setHeader(key, value);
+    });
+
+    // نضيف ترويسة تثبت أن البروكسي هو من مرّر الطلب
     res.setHeader("X-Served-By", "proxy-ip.onrender.com");
 
-    if (!response.ok) {
-      return res.send(`Upstream error: ${response.status}`);
+    // إذا هناك body، نمرّره مباشرة للعميل
+    if (response.body) {
+      response.body.pipe(res);
+    } else {
+      res.send("Empty response from upstream.");
     }
-
-    const body = response.body;
-    if (body) body.pipe(res);
-    else res.send("Empty response from upstream.");
   } catch (err) {
-    console.error("❌ Proxy error [live]:", err.message);
+    console.error("❌ Proxy error:", err.message);
     res.status(502).send(`Proxy error: ${err.message}`);
   }
 });
 
-app.get("/", (req, res) =>
-  res.send("✅ Proxy is running OK. Use /test-proxy-ping to verify.")
-);
+// صفحة افتراضية لتأكيد عمل السيرفر
+app.get("/", (req, res) => {
+  res.send("✅ Proxy is running and ready for all subdomains.");
+});
 
-app.listen(PORT, () =>
-  console.log(`🚀 Proxy running on port ${PORT}`)
-);
+// بدء التشغيل
+app.listen(PORT, () => {
+  console.log(`🚀 Proxy running on port ${PORT}`);
+});
