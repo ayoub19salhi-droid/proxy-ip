@@ -4,35 +4,35 @@ import fetch from "node-fetch";
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// السماح بالعمل خلف أي بروكسي
 app.set("trust proxy", true);
 
-// أي رابط من أي Subdomain سيتم توجيهه
+// Proxy endpoint for live streams or get.php
 app.get("/*", async (req, res) => {
   try {
-    // إعادة بناء الرابط الأصلي
-    const originalUrl = req.originalUrl; // كل شيء بعد /
-    const subdomainUrl = `http://19.inthenameofgod.cfd${originalUrl}`;
+    // targetHost: كل Subdomain سيأخذ الاسم من Host header
+    const targetHost = req.hostname.includes("proxy-ip.onrender.com")
+      ? "19.inthenameofgod.cfd"
+      : req.hostname;
 
-    console.log("➡️ Fetching:", subdomainUrl);
+    const targetUrl = `http://${targetHost}${req.originalUrl}`;
 
-    const response = await fetch(subdomainUrl, {
+    console.log("➡️ Fetching:", targetUrl);
+
+    const response = await fetch(targetUrl, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0",
-        "Referer": "https://www.google.com/",
-        "Origin": "https://www.google.com",
-        "Accept": "*/*",
+        "User-Agent": req.headers["user-agent"] || "Mozilla/5.0",
+        "Referer": req.headers["referer"] || "https://www.google.com/",
+        "Origin": req.headers["origin"] || "https://www.google.com",
+        "Accept": req.headers["accept"] || "*/*",
         "Connection": "keep-alive",
         "Accept-Encoding": "identity"
       },
       redirect: "manual",
-      compress: false,
+      compress: false
     });
 
     console.log("⬅️ Response:", response.status, response.statusText);
 
-    // إعادة الرؤوس نفسها
     res.status(response.status);
     response.headers.forEach((v, k) => res.setHeader(k, v));
 
@@ -45,7 +45,6 @@ app.get("/*", async (req, res) => {
   }
 });
 
-// صفحة اختبار البروكسي
 app.get("/", (req, res) => res.send("✅ Proxy is running OK."));
 
 app.listen(PORT, () => console.log(`🚀 Proxy running on port ${PORT}`));
