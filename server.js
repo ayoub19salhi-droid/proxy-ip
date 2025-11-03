@@ -3,24 +3,34 @@ import fetch from "node-fetch";
 
 const app = express();
 
-app.get("*", async (req, res) => {
-  try {
-    const targetHost = "cname.cdnnet.xyz"; // السيرفر الأصلي
-    const targetUrl = `http://${targetHost}${req.originalUrl}`;
+// استبدل هذا بالـ upstream الحقيقي
+const UPSTREAM = "http://cname.cdnnet.xyz";
 
-    const response = await fetch(targetUrl, {
+app.get("/*", async (req, res) => {
+  const targetUrl = `${UPSTREAM}${req.originalUrl}`;
+  try {
+    const r = await fetch(targetUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; IPTVProxy/1.0)",
         "Referer": "http://google.com",
       },
     });
 
-    res.status(response.status);
-    response.body.pipe(res);
+    if (!r.ok) {
+      res.status(r.status).send(`Upstream error: ${r.status}`);
+      return;
+    }
+
+    // تمرير البث كما هو
+    res.status(r.status);
+    r.body.pipe(res);
   } catch (err) {
-    res.status(502).send("Proxy error: " + err.message);
+    res.status(502).send("Proxy failed: " + err.message);
   }
 });
+
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`Proxy running on ${PORT}`));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Proxy running on port ${PORT}`));
