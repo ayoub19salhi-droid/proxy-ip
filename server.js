@@ -4,14 +4,12 @@ import fetch from "node-fetch";
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// ✅ اسم السيرفر الأصلي
-const UPSTREAM = "http://19.inthenameofgod.cfd";
-
 app.set("trust proxy", true);
 
-// ✅ هذا الكود يمرر أي طلب (سواء live أو get.php أو stream …)
+// دالة عامة للتعامل مع أي طلب
 app.use(async (req, res) => {
-  const targetUrl = UPSTREAM + req.originalUrl;
+  const targetBase = "http://19.inthenameofgod.cfd";
+  const targetUrl = targetBase + req.originalUrl;
 
   console.log("➡️ Fetching:", targetUrl);
 
@@ -27,14 +25,17 @@ app.use(async (req, res) => {
         "Accept-Encoding": "identity",
       },
       redirect: "manual",
-      compress: false,
     });
 
     console.log("⬅️ Response:", response.status, response.statusText);
 
+    // تمرير الكود والـ headers
     res.status(response.status);
-    response.headers.forEach((v, k) => res.setHeader(k, v));
+    response.headers.forEach((value, key) => {
+      res.setHeader(key, value);
+    });
 
+    // تمرير البث أو الملف
     const body = response.body;
     if (body) body.pipe(res);
     else res.send("Empty response from upstream.");
